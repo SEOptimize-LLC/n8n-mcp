@@ -1,0 +1,1007 @@
+{
+  "name": "Blog Visual Asset Analyzer",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Blog Visual Asset Analyzer",
+        "formDescription": "Upload a markdown blog post to analyze and generate visual assets (4-8 opportunities for charts, illustrations, and infographics)",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Blog Post (Markdown)",
+              "fieldType": "file",
+              "requiredField": true,
+              "acceptFileTypes": ".md,.txt,.markdown",
+              "multipleFiles": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "form-trigger",
+      "name": "Upload Blog Post",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [0, 300],
+      "webhookId": "blog-visual-analyzer"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "HTTP-Referer",
+              "value": "https://n8n.io"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert content analyst specializing in identifying opportunities for visual assets in written content. Your task is to analyze blog posts and identify 4-8 opportunities where visual assets would significantly enhance reader engagement and comprehension.\\n\\nLook for these key visual opportunity indicators:\\n- Statistics and numerical data\\n- Comparisons between items/concepts\\n- Step-by-step processes\\n- Timelines and sequences\\n- Hierarchical information\\n- Trends and patterns\\n- Research findings and claims\\n- Lists and categories\\n- Complex concepts that benefit from visualization\\n\\nFor each opportunity, determine the most appropriate visual type from these categories:\\n\\n**For comparing values:**\\n- Bar Chart: Compares discrete categories using rectangular bars\\n- Column Chart: Vertical bar chart for category comparison\\n- Pie Chart: Shows proportion of a whole with percentage slices\\n- Doughnut Chart: Pie chart variation with center hole\\n- Stacked Bar Chart: Shows composition by stacking sub-categories\\n\\n**For showing trends and relationships:**\\n- Line Graph: Data points connected by lines showing change over time\\n- Area Graph: Line graph with filled area for cumulative totals\\n- Scatter Plot: Shows relationship between two variables with points\\n- Bubble Chart: Scatter plot where bubble size represents third variable\\n\\n**For showing data distribution:**\\n- Histogram: Bars showing frequency distribution of continuous data\\n- Box Plot: Shows data distribution through quartiles and median\\n- Density Plot: Smooth curve showing probability distribution\\n- Dot Plot: Simple dots for frequency comparison\\n\\n**For hierarchical and flow data:**\\n- Treemap: Nested rectangles showing hierarchical data proportionally\\n- Sunburst Chart: Hierarchical data using nested rings\\n- Sankey Diagram: Flow between nodes with proportional width\\n- Funnel Chart: Stages in process with descending cone shape\\n\\n**For special purposes:**\\n- Heatmap: Color-coded cells showing magnitude in matrix format\\n- Gantt Chart: Project schedule visualization over time\\n- Radar Chart: Multivariate comparison in circular format\\n- Waterfall Chart: Shows value changes through positive/negative steps\\n\\n**For conceptual visualization:**\\n- Illustration: Conceptual drawings explaining abstract ideas\\n- Process Flow: Step-by-step visual showing a workflow\\n- Infographic: Combined data and design for storytelling\\n- Icon Set: Visual symbols representing concepts\\n\\nYou MUST respond with valid JSON only. No markdown, no explanations outside the JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze the following blog post and identify 4-8 opportunities for visual assets. Return ONLY valid JSON in this exact format:\\n\\n{\\n  \\\"opportunities\\\": [\\n    {\\n      \\\"id\\\": 1,\\n      \\\"quote\\\": \\\"The exact text from the article that triggers this opportunity\\\",\\n      \\\"type\\\": \\\"statistic|comparison|process|timeline|hierarchy|trend|research|list|concept\\\",\\n      \\\"visual_type\\\": \\\"The specific chart/visual type from the categories above\\\",\\n      \\\"visual_category\\\": \\\"comparison|trends|distribution|hierarchical|special|conceptual\\\",\\n      \\\"context\\\": \\\"Brief explanation of why this visual would enhance the content\\\",\\n      \\\"data_points\\\": [\\\"Key data or concepts to include in the visual\\\"],\\n      \\\"suggested_style\\\": \\\"modern|corporate|minimal|playful|technical\\\"\\n    }\\n  ],\\n  \\\"total_opportunities\\\": 5\\n}\\n\\nBlog Post Content:\\n\\n{{ $json['Blog Post (Markdown)'].data }}\"\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 4000\n}"
+      },
+      "id": "content-analyzer",
+      "name": "AI Agent 1 - Content Analyzer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openrouter-auth",
+          "name": "OpenRouter API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the AI response and extract opportunities\nconst response = $input.first().json;\n\n// Get the content from the AI response\nlet content = response.choices[0].message.content;\n\n// Try to parse as JSON, handling potential markdown code blocks\nif (content.startsWith('```')) {\n  content = content.replace(/```json\\n?/g, '').replace(/```\\n?/g, '');\n}\n\ntry {\n  const parsed = JSON.parse(content.trim());\n  \n  // Validate we have opportunities array\n  if (!parsed.opportunities || !Array.isArray(parsed.opportunities)) {\n    throw new Error('Invalid response structure: missing opportunities array');\n  }\n  \n  // Ensure we have 4-8 opportunities\n  const opportunities = parsed.opportunities.slice(0, 8);\n  \n  if (opportunities.length < 4) {\n    console.warn(`Only ${opportunities.length} opportunities found, minimum is 4`);\n  }\n  \n  return {\n    json: {\n      opportunities: opportunities,\n      total: opportunities.length,\n      original_content: $('Upload Blog Post').first().json['Blog Post (Markdown)'].data\n    }\n  };\n} catch (error) {\n  throw new Error(`Failed to parse AI response: ${error.message}. Content: ${content.substring(0, 500)}`);\n}"
+      },
+      "id": "parse-opportunities",
+      "name": "Parse Opportunities",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split opportunities into individual items for parallel processing\nconst data = $input.first().json;\nconst opportunities = data.opportunities;\n\nreturn opportunities.map((opp, index) => ({\n  json: {\n    opportunity: opp,\n    index: index + 1,\n    total: data.total,\n    original_content: data.original_content\n  }\n}));"
+      },
+      "id": "split-opportunities",
+      "name": "Split Opportunities",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "HTTP-Referer",
+              "value": "https://n8n.io"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert AI image prompt engineer specializing in creating detailed, precise prompts for AI image generation models. Your prompts should produce professional-quality visuals suitable for blog posts and marketing content.\\n\\nYour prompts must be:\\n1. Highly detailed and specific\\n2. Include style, composition, and color guidance\\n3. Specify the exact type of visualization\\n4. Include data representation guidelines\\n5. Professional and publication-ready\\n\\nFor charts and graphs, include:\\n- Exact chart type and orientation\\n- Color palette suggestions (use professional, accessible colors)\\n- Label and legend placement\\n- Data visualization best practices\\n- Clean, minimal design aesthetic\\n\\nFor illustrations and infographics:\\n- Art style (flat design, isometric, line art, etc.)\\n- Color scheme and mood\\n- Composition and focal points\\n- Text integration guidelines\\n- Professional, modern aesthetic\\n\\nAlways ensure the visual will be:\\n- Easy to understand at a glance\\n- Professional and suitable for business content\\n- Accessible (good contrast, clear labels)\\n- Modern and engaging\\n\\nYou MUST respond with valid JSON only.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Create a detailed AI image generation prompt for the following visual opportunity:\\n\\n**Opportunity #{{ $json.opportunity.id }}**\\n- Quote: {{ $json.opportunity.quote }}\\n- Type: {{ $json.opportunity.type }}\\n- Visual Type: {{ $json.opportunity.visual_type }}\\n- Category: {{ $json.opportunity.visual_category }}\\n- Context: {{ $json.opportunity.context }}\\n- Data Points: {{ JSON.stringify($json.opportunity.data_points) }}\\n- Style: {{ $json.opportunity.suggested_style }}\\n\\nReturn ONLY valid JSON in this exact format:\\n\\n{\\n  \\\"opportunity_id\\\": {{ $json.opportunity.id }},\\n  \\\"prompt\\\": \\\"The complete, detailed prompt for AI image generation (500-800 characters)\\\",\\n  \\\"negative_prompt\\\": \\\"Elements to avoid in the generation\\\",\\n  \\\"aspect_ratio\\\": \\\"16:9 or 1:1 or 4:3\\\",\\n  \\\"resolution\\\": \\\"2K or 4K\\\",\\n  \\\"visual_type\\\": \\\"{{ $json.opportunity.visual_type }}\\\",\\n  \\\"filename_suggestion\\\": \\\"descriptive-filename-without-extension\\\"\\n}\"\n    }\n  ],\n  \"temperature\": 0.5,\n  \"max_tokens\": 1500\n}"
+      },
+      "id": "prompt-generator",
+      "name": "AI Agent 2 - Prompt Generator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openrouter-auth",
+          "name": "OpenRouter API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the prompt generator response\nconst response = $input.first().json;\nconst previousData = $('Split Opportunities').item;\n\nlet content = response.choices[0].message.content;\n\n// Handle markdown code blocks\nif (content.startsWith('```')) {\n  content = content.replace(/```json\\n?/g, '').replace(/```\\n?/g, '');\n}\n\ntry {\n  const parsed = JSON.parse(content.trim());\n  \n  return {\n    json: {\n      ...parsed,\n      index: previousData.json.index,\n      total: previousData.json.total,\n      original_opportunity: previousData.json.opportunity\n    }\n  };\n} catch (error) {\n  // If parsing fails, create a fallback prompt\n  const opp = previousData.json.opportunity;\n  return {\n    json: {\n      opportunity_id: opp.id,\n      prompt: `Professional ${opp.visual_type} visualization showing ${opp.context}. ${opp.suggested_style} style, clean design, suitable for business blog. Data points: ${opp.data_points.join(', ')}. High quality, publication ready.`,\n      negative_prompt: \"blurry, low quality, amateur, cluttered, hard to read, watermark\",\n      aspect_ratio: \"16:9\",\n      resolution: \"2K\",\n      visual_type: opp.visual_type,\n      filename_suggestion: `visual-${opp.id}-${opp.visual_type.toLowerCase().replace(/\\s+/g, '-')}`,\n      index: previousData.json.index,\n      total: previousData.json.total,\n      original_opportunity: opp,\n      parse_error: error.message\n    }\n  };\n}"
+      },
+      "id": "parse-prompt",
+      "name": "Parse Prompt Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.kie.ai/api/v1/jobs/createTask",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"nano-banana-pro\",\n  \"input\": {\n    \"prompt\": \"{{ $json.prompt }}\",\n    \"aspect_ratio\": \"{{ $json.aspect_ratio || '16:9' }}\",\n    \"resolution\": \"{{ $json.resolution || '2K' }}\",\n    \"output_format\": \"png\"\n  }\n}"
+      },
+      "id": "create-image-task",
+      "name": "Create Image Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "kie-ai-auth",
+          "name": "Kie.ai API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store task info and prepare for status checking\nconst taskResponse = $input.first().json;\nconst promptData = $('Parse Prompt Response').item.json;\n\nreturn {\n  json: {\n    taskId: taskResponse.taskId || taskResponse.data?.taskId || taskResponse.id,\n    status: 'queued',\n    checkCount: 0,\n    maxChecks: 30,\n    promptData: promptData,\n    opportunity_id: promptData.opportunity_id,\n    filename: promptData.filename_suggestion\n  }\n};"
+      },
+      "id": "store-task-info",
+      "name": "Store Task Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 300]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "wait-for-processing",
+      "name": "Wait 5s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1920, 300],
+      "webhookId": "wait-processing"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.kie.ai/api/v1/jobs/recordInfo",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"taskId\": \"{{ $json.taskId }}\"\n}"
+      },
+      "id": "check-task-status",
+      "name": "Check Task Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2160, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "kie-ai-auth",
+          "name": "Kie.ai API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process status response and determine next action\nconst statusResponse = $input.first().json;\n\n// Get previous task data - try multiple sources\nlet previousData;\ntry {\n  previousData = $('Store Task Info').item?.json;\n} catch (e) {\n  // If Store Task Info not in path, get from Prepare Retry\n  try {\n    previousData = $('Prepare Retry').item?.json;\n  } catch (e2) {\n    previousData = {};\n  }\n}\n\n// Extract status and image URL from response\nconst status = statusResponse.status || statusResponse.data?.status || 'unknown';\nconst imageUrl = statusResponse.output?.image_url || \n                 statusResponse.data?.output?.image_url ||\n                 statusResponse.result?.url ||\n                 statusResponse.data?.result?.url ||\n                 statusResponse.output?.url ||\n                 statusResponse.data?.output?.url ||\n                 statusResponse.url ||\n                 null;\n\nconst checkCount = (previousData.checkCount || 0) + 1;\nconst maxChecks = previousData.maxChecks || 30;\n\nconst isComplete = ['successful', 'completed', 'success', 'done'].includes(status.toLowerCase());\nconst isFailed = ['failed', 'error', 'cancelled'].includes(status.toLowerCase()) || checkCount >= maxChecks;\nconst shouldRetry = !isComplete && !isFailed;\n\nreturn {\n  json: {\n    taskId: previousData.taskId,\n    status: status,\n    imageUrl: imageUrl,\n    checkCount: checkCount,\n    maxChecks: maxChecks,\n    isComplete: isComplete,\n    isFailed: isFailed,\n    shouldRetry: shouldRetry,\n    promptData: previousData.promptData,\n    opportunity_id: previousData.opportunity_id,\n    filename: previousData.filename,\n    rawResponse: statusResponse\n  }\n};"
+      },
+      "id": "process-status",
+      "name": "Process Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "complete-condition",
+              "leftValue": "={{ $json.isComplete }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-complete",
+      "name": "Generation Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2640, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "retry-condition",
+              "leftValue": "={{ $json.shouldRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-should-retry",
+      "name": "Should Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2880, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for retry loop\nconst data = $input.first().json;\n\nreturn {\n  json: {\n    taskId: data.taskId,\n    checkCount: data.checkCount,\n    maxChecks: data.maxChecks,\n    promptData: data.promptData,\n    opportunity_id: data.opportunity_id,\n    filename: data.filename\n  }\n};"
+      },
+      "id": "prepare-retry",
+      "name": "Prepare Retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3120, 400]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "wait-retry",
+      "name": "Wait Before Retry",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3360, 400],
+      "webhookId": "wait-retry"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.imageUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "download-image",
+      "name": "Download Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2880, 100]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "folderId": {
+          "__rl": true,
+          "value": "root",
+          "mode": "list"
+        },
+        "name": "={{ $('Process Status').item.json.filename || 'visual-' + $('Process Status').item.json.opportunity_id }}.png",
+        "options": {
+          "fields": {
+            "values": [
+              {
+                "name": "description",
+                "value": "=Generated visual for opportunity #{{ $('Process Status').item.json.opportunity_id }}: {{ $('Process Status').item.json.promptData.visual_type }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "upload-to-drive",
+      "name": "Upload to Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [3120, 100],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "google-drive-creds",
+          "name": "Google Drive"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare success result\nconst driveResponse = $input.first().json;\nconst statusData = $('Process Status').item.json;\n\nreturn {\n  json: {\n    success: true,\n    opportunity_id: statusData.opportunity_id,\n    visual_type: statusData.promptData?.visual_type,\n    filename: statusData.filename,\n    drive_file_id: driveResponse.id,\n    drive_url: driveResponse.webViewLink || driveResponse.webContentLink,\n    original_quote: statusData.promptData?.original_opportunity?.quote\n  }\n};"
+      },
+      "id": "prepare-success-result",
+      "name": "Success Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3360, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle failed image generation\nconst statusData = $input.first().json;\n\nreturn {\n  json: {\n    success: false,\n    opportunity_id: statusData.opportunity_id,\n    visual_type: statusData.promptData?.visual_type,\n    filename: statusData.filename,\n    error: statusData.isFailed ? \n      (statusData.checkCount >= statusData.maxChecks ? 'Timeout: max retries exceeded' : 'Generation failed') :\n      'Unknown error',\n    checkCount: statusData.checkCount,\n    lastStatus: statusData.status,\n    original_quote: statusData.promptData?.original_opportunity?.quote\n  }\n};"
+      },
+      "id": "prepare-failure-result",
+      "name": "Failure Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3360, 600]
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "output": "empty"
+      },
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [3600, 300]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "aggregate-all-results",
+      "name": "Aggregate All Results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [3840, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create final summary report\nconst allResults = $input.first().json.data;\n\nconst successful = allResults.filter(r => r.success);\nconst failed = allResults.filter(r => !r.success);\n\nconst summary = {\n  total_opportunities: allResults.length,\n  successful_generations: successful.length,\n  failed_generations: failed.length,\n  success_rate: Math.round((successful.length / allResults.length) * 100) + '%',\n  generated_visuals: successful.map(s => ({\n    opportunity_id: s.opportunity_id,\n    visual_type: s.visual_type,\n    filename: s.filename,\n    drive_url: s.drive_url,\n    quote: s.original_quote?.substring(0, 100) + '...'\n  })),\n  failed_visuals: failed.map(f => ({\n    opportunity_id: f.opportunity_id,\n    visual_type: f.visual_type,\n    error: f.error,\n    quote: f.original_quote?.substring(0, 100) + '...'\n  })),\n  timestamp: new Date().toISOString()\n};\n\nreturn { json: summary };"
+      },
+      "id": "create-summary",
+      "name": "Create Summary Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4080, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-to-webhook",
+      "name": "Respond with Results",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [4320, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.kie.ai/api/v1/jobs/recordInfo",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"taskId\": \"{{ $json.taskId }}\"\n}"
+      },
+      "id": "check-task-status-retry",
+      "name": "Check Status (Retry)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3600, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "kie-ai-auth",
+          "name": "Kie.ai API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process retry status response\nconst statusResponse = $input.first().json;\nconst previousData = $('Prepare Retry').item.json;\n\n// Extract status and image URL from response\nconst status = statusResponse.status || statusResponse.data?.status || 'unknown';\nconst imageUrl = statusResponse.output?.image_url || \n                 statusResponse.data?.output?.image_url ||\n                 statusResponse.result?.url ||\n                 statusResponse.data?.result?.url ||\n                 statusResponse.output?.url ||\n                 statusResponse.data?.output?.url ||\n                 statusResponse.url ||\n                 null;\n\nconst checkCount = (previousData.checkCount || 0) + 1;\nconst maxChecks = previousData.maxChecks || 30;\n\nconst isComplete = ['successful', 'completed', 'success', 'done'].includes(status.toLowerCase());\nconst isFailed = ['failed', 'error', 'cancelled'].includes(status.toLowerCase()) || checkCount >= maxChecks;\nconst shouldRetry = !isComplete && !isFailed;\n\nreturn {\n  json: {\n    taskId: previousData.taskId,\n    status: status,\n    imageUrl: imageUrl,\n    checkCount: checkCount,\n    maxChecks: maxChecks,\n    isComplete: isComplete,\n    isFailed: isFailed,\n    shouldRetry: shouldRetry,\n    promptData: previousData.promptData,\n    opportunity_id: previousData.opportunity_id,\n    filename: previousData.filename,\n    rawResponse: statusResponse\n  }\n};"
+      },
+      "id": "process-retry-status",
+      "name": "Process Retry Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3840, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "retry-complete-condition",
+              "leftValue": "={{ $json.isComplete }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-retry-complete",
+      "name": "Retry Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [4080, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.imageUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "download-retry-image",
+      "name": "Download Retry Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4320, 200]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "folderId": {
+          "__rl": true,
+          "value": "root",
+          "mode": "list"
+        },
+        "name": "={{ $('Process Retry Status').item.json.filename || 'visual-' + $('Process Retry Status').item.json.opportunity_id }}.png",
+        "options": {
+          "fields": {
+            "values": [
+              {
+                "name": "description",
+                "value": "=Generated visual for opportunity #{{ $('Process Retry Status').item.json.opportunity_id }}: {{ $('Process Retry Status').item.json.promptData.visual_type }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "upload-retry-to-drive",
+      "name": "Upload Retry to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [4560, 200],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "google-drive-creds",
+          "name": "Google Drive"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare success result from retry\nconst driveResponse = $input.first().json;\nconst statusData = $('Process Retry Status').item.json;\n\nreturn {\n  json: {\n    success: true,\n    opportunity_id: statusData.opportunity_id,\n    visual_type: statusData.promptData?.visual_type,\n    filename: statusData.filename,\n    drive_file_id: driveResponse.id,\n    drive_url: driveResponse.webViewLink || driveResponse.webContentLink,\n    original_quote: statusData.promptData?.original_opportunity?.quote\n  }\n};"
+      },
+      "id": "retry-success-result",
+      "name": "Retry Success Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4800, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "should-loop-condition",
+              "leftValue": "={{ $json.shouldRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-should-loop",
+      "name": "Continue Loop?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [4320, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare for next retry iteration\nconst data = $input.first().json;\n\nreturn {\n  json: {\n    taskId: data.taskId,\n    checkCount: data.checkCount,\n    maxChecks: data.maxChecks,\n    promptData: data.promptData,\n    opportunity_id: data.opportunity_id,\n    filename: data.filename\n  }\n};"
+      },
+      "id": "prepare-loop",
+      "name": "Prepare Loop",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4560, 500]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "wait-loop",
+      "name": "Wait Loop",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [4800, 500],
+      "webhookId": "wait-loop"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle final failure after all retries exhausted\nconst statusData = $input.first().json;\n\nreturn {\n  json: {\n    success: false,\n    opportunity_id: statusData.opportunity_id,\n    visual_type: statusData.promptData?.visual_type,\n    filename: statusData.filename,\n    error: statusData.checkCount >= statusData.maxChecks ? \n      'Timeout: max retries exceeded (' + statusData.checkCount + ' checks)' : \n      'Generation failed with status: ' + statusData.status,\n    checkCount: statusData.checkCount,\n    lastStatus: statusData.status,\n    original_quote: statusData.promptData?.original_opportunity?.quote\n  }\n};"
+      },
+      "id": "final-failure-result",
+      "name": "Final Failure Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4560, 700]
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "output": "empty"
+      },
+      "id": "merge-retry-results",
+      "name": "Merge Retry Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [5040, 300]
+    }
+  ],
+  "connections": {
+    "Upload Blog Post": {
+      "main": [
+        [
+          {
+            "node": "AI Agent 1 - Content Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent 1 - Content Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Parse Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Opportunities": {
+      "main": [
+        [
+          {
+            "node": "Split Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Opportunities": {
+      "main": [
+        [
+          {
+            "node": "AI Agent 2 - Prompt Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent 2 - Prompt Generator": {
+      "main": [
+        [
+          {
+            "node": "Parse Prompt Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Prompt Response": {
+      "main": [
+        [
+          {
+            "node": "Create Image Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Image Task": {
+      "main": [
+        [
+          {
+            "node": "Store Task Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Task Info": {
+      "main": [
+        [
+          {
+            "node": "Wait 5s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5s": {
+      "main": [
+        [
+          {
+            "node": "Check Task Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Task Status": {
+      "main": [
+        [
+          {
+            "node": "Process Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Status": {
+      "main": [
+        [
+          {
+            "node": "Generation Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generation Complete?": {
+      "main": [
+        [
+          {
+            "node": "Download Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Should Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Retry?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Retry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failure Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Retry": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Retry": {
+      "main": [
+        [
+          {
+            "node": "Check Status (Retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Status (Retry)": {
+      "main": [
+        [
+          {
+            "node": "Process Retry Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Retry Status": {
+      "main": [
+        [
+          {
+            "node": "Retry Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Complete?": {
+      "main": [
+        [
+          {
+            "node": "Download Retry Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Continue Loop?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Retry Image": {
+      "main": [
+        [
+          {
+            "node": "Upload Retry to Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Retry to Drive": {
+      "main": [
+        [
+          {
+            "node": "Retry Success Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Success Result": {
+      "main": [
+        [
+          {
+            "node": "Merge Retry Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue Loop?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Loop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Failure Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Loop": {
+      "main": [
+        [
+          {
+            "node": "Wait Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Loop": {
+      "main": [
+        [
+          {
+            "node": "Check Status (Retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Failure Result": {
+      "main": [
+        [
+          {
+            "node": "Merge Retry Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Download Image": {
+      "main": [
+        [
+          {
+            "node": "Upload to Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Success Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Result": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failure Result": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Retry Results": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Results": {
+      "main": [
+        [
+          {
+            "node": "Create Summary Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Summary Report": {
+      "main": [
+        [
+          {
+            "node": "Respond with Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "AI",
+      "id": "ai-tag"
+    },
+    {
+      "name": "Content",
+      "id": "content-tag"
+    },
+    {
+      "name": "Image Generation",
+      "id": "image-tag"
+    }
+  ],
+  "pinData": {},
+  "meta": {
+    "instanceId": "n8n-mcp-generated",
+    "templateCredsSetupCompleted": false
+  }
+}
