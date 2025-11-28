@@ -1,0 +1,245 @@
+{
+  "name": "Blog Visual Asset Analyzer - Main (Parallel)",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Blog Visual Asset Analyzer",
+        "formDescription": "Upload a markdown blog post to analyze and generate visual assets (4-8 opportunities for charts, illustrations, and infographics). Images are generated in parallel for faster processing.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Blog Post (Markdown)",
+              "fieldType": "file",
+              "requiredField": true,
+              "acceptFileTypes": ".md,.txt,.markdown",
+              "multipleFiles": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "form-trigger",
+      "name": "Upload Blog Post",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [0, 300],
+      "webhookId": "blog-visual-analyzer-parallel"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "HTTP-Referer",
+              "value": "https://n8n.io"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert content analyst specializing in identifying opportunities for visual assets in written content. Your task is to analyze blog posts and identify 4-8 opportunities where visual assets would significantly enhance reader engagement and comprehension.\\n\\nLook for these key visual opportunity indicators:\\n- Statistics and numerical data\\n- Comparisons between items/concepts\\n- Step-by-step processes\\n- Timelines and sequences\\n- Hierarchical information\\n- Trends and patterns\\n- Research findings and claims\\n- Lists and categories\\n- Complex concepts that benefit from visualization\\n\\nFor each opportunity, determine the most appropriate visual type from these categories:\\n\\n**For comparing values:**\\n- Bar Chart: Compares discrete categories using rectangular bars\\n- Column Chart: Vertical bar chart for category comparison\\n- Pie Chart: Shows proportion of a whole with percentage slices\\n- Doughnut Chart: Pie chart variation with center hole\\n- Stacked Bar Chart: Shows composition by stacking sub-categories\\n\\n**For showing trends and relationships:**\\n- Line Graph: Data points connected by lines showing change over time\\n- Area Graph: Line graph with filled area for cumulative totals\\n- Scatter Plot: Shows relationship between two variables with points\\n- Bubble Chart: Scatter plot where bubble size represents third variable\\n\\n**For showing data distribution:**\\n- Histogram: Bars showing frequency distribution of continuous data\\n- Box Plot: Shows data distribution through quartiles and median\\n- Density Plot: Smooth curve showing probability distribution\\n- Dot Plot: Simple dots for frequency comparison\\n\\n**For hierarchical and flow data:**\\n- Treemap: Nested rectangles showing hierarchical data proportionally\\n- Sunburst Chart: Hierarchical data using nested rings\\n- Sankey Diagram: Flow between nodes with proportional width\\n- Funnel Chart: Stages in process with descending cone shape\\n\\n**For special purposes:**\\n- Heatmap: Color-coded cells showing magnitude in matrix format\\n- Gantt Chart: Project schedule visualization over time\\n- Radar Chart: Multivariate comparison in circular format\\n- Waterfall Chart: Shows value changes through positive/negative steps\\n\\n**For conceptual visualization:**\\n- Illustration: Conceptual drawings explaining abstract ideas\\n- Process Flow: Step-by-step visual showing a workflow\\n- Infographic: Combined data and design for storytelling\\n- Icon Set: Visual symbols representing concepts\\n\\nYou MUST respond with valid JSON only. No markdown, no explanations outside the JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze the following blog post and identify 4-8 opportunities for visual assets. Return ONLY valid JSON in this exact format:\\n\\n{\\n  \\\"opportunities\\\": [\\n    {\\n      \\\"id\\\": 1,\\n      \\\"quote\\\": \\\"The exact text from the article that triggers this opportunity\\\",\\n      \\\"type\\\": \\\"statistic|comparison|process|timeline|hierarchy|trend|research|list|concept\\\",\\n      \\\"visual_type\\\": \\\"The specific chart/visual type from the categories above\\\",\\n      \\\"visual_category\\\": \\\"comparison|trends|distribution|hierarchical|special|conceptual\\\",\\n      \\\"context\\\": \\\"Brief explanation of why this visual would enhance the content\\\",\\n      \\\"data_points\\\": [\\\"Key data or concepts to include in the visual\\\"],\\n      \\\"suggested_style\\\": \\\"modern|corporate|minimal|playful|technical\\\"\\n    }\\n  ],\\n  \\\"total_opportunities\\\": 5\\n}\\n\\nBlog Post Content:\\n\\n{{ $json['Blog Post (Markdown)'].data }}\"\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 4000\n}"
+      },
+      "id": "content-analyzer",
+      "name": "AI Agent 1 - Content Analyzer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openrouter-auth",
+          "name": "OpenRouter API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the AI response and extract opportunities\nconst response = $input.first().json;\n\n// Get the content from the AI response\nlet content = response.choices[0].message.content;\n\n// Try to parse as JSON, handling potential markdown code blocks\nif (content.startsWith('```')) {\n  content = content.replace(/```json\\n?/g, '').replace(/```\\n?/g, '');\n}\n\ntry {\n  const parsed = JSON.parse(content.trim());\n  \n  // Validate we have opportunities array\n  if (!parsed.opportunities || !Array.isArray(parsed.opportunities)) {\n    throw new Error('Invalid response structure: missing opportunities array');\n  }\n  \n  // Ensure we have 4-8 opportunities\n  const opportunities = parsed.opportunities.slice(0, 8);\n  \n  if (opportunities.length < 4) {\n    console.warn(`Only ${opportunities.length} opportunities found, minimum is 4`);\n  }\n  \n  return {\n    json: {\n      opportunities: opportunities,\n      total: opportunities.length,\n      original_content: $('Upload Blog Post').first().json['Blog Post (Markdown)'].data\n    }\n  };\n} catch (error) {\n  throw new Error(`Failed to parse AI response: ${error.message}. Content: ${content.substring(0, 500)}`);\n}"
+      },
+      "id": "parse-opportunities",
+      "name": "Parse Opportunities",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split opportunities into individual items for parallel sub-workflow execution\nconst data = $input.first().json;\nconst opportunities = data.opportunities;\n\nreturn opportunities.map((opp, index) => ({\n  json: {\n    opportunity: opp,\n    index: index + 1,\n    total: data.total\n  }\n}));"
+      },
+      "id": "split-opportunities",
+      "name": "Split for Parallel Processing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 300]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "Blog Visual Asset Generator - Image Pipeline"
+        },
+        "options": {}
+      },
+      "id": "execute-subworkflow",
+      "name": "Generate Image (Parallel)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1040, 300]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "aggregate-results",
+      "name": "Aggregate All Results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create final summary report\nconst allResults = $input.first().json.data;\n\nconst successful = allResults.filter(r => r.success);\nconst failed = allResults.filter(r => !r.success);\n\n// Calculate average processing time\nconst avgChecks = successful.length > 0 \n  ? Math.round(successful.reduce((sum, s) => sum + (s.checks_required || 1), 0) / successful.length)\n  : 0;\n\nconst summary = {\n  total_opportunities: allResults.length,\n  successful_generations: successful.length,\n  failed_generations: failed.length,\n  success_rate: Math.round((successful.length / allResults.length) * 100) + '%',\n  processing_mode: 'parallel',\n  avg_status_checks: avgChecks,\n  generated_visuals: successful.map(s => ({\n    opportunity_id: s.opportunity_id,\n    visual_type: s.visual_type,\n    filename: s.filename,\n    drive_url: s.drive_url,\n    quote: s.original_quote?.substring(0, 100) + '...'\n  })),\n  failed_visuals: failed.map(f => ({\n    opportunity_id: f.opportunity_id,\n    visual_type: f.visual_type,\n    error: f.error,\n    quote: f.original_quote?.substring(0, 100) + '...'\n  })),\n  timestamp: new Date().toISOString()\n};\n\nreturn { json: summary };"
+      },
+      "id": "create-summary",
+      "name": "Create Summary Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-webhook",
+      "name": "Respond with Results",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1820, 300]
+    }
+  ],
+  "connections": {
+    "Upload Blog Post": {
+      "main": [
+        [
+          {
+            "node": "AI Agent 1 - Content Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent 1 - Content Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Parse Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Opportunities": {
+      "main": [
+        [
+          {
+            "node": "Split for Parallel Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split for Parallel Processing": {
+      "main": [
+        [
+          {
+            "node": "Generate Image (Parallel)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Image (Parallel)": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Results": {
+      "main": [
+        [
+          {
+            "node": "Create Summary Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Summary Report": {
+      "main": [
+        [
+          {
+            "node": "Respond with Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "AI",
+      "id": "ai-tag"
+    },
+    {
+      "name": "Content",
+      "id": "content-tag"
+    },
+    {
+      "name": "Image Generation",
+      "id": "image-tag"
+    },
+    {
+      "name": "Parallel",
+      "id": "parallel-tag"
+    }
+  ],
+  "pinData": {},
+  "meta": {
+    "instanceId": "n8n-mcp-generated",
+    "templateCredsSetupCompleted": false
+  }
+}
